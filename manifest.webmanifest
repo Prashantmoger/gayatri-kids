@@ -1,8 +1,8 @@
 {
   "id": "./",
-  "name": "Gayatri Mantra for Kids",
-  "short_name": "Gayatri Kids",
-  "description": "Learn the Gayatri Mantra with a happy sun: listen, learn a line, clap along and collect stars. Works offline.",
+  "name": "Little Mantras",
+  "short_name": "Mantras",
+  "description": "Seven mantras for children aged 3 to 5, including the Hanuman Chalisa. Listen, learn, clap along and collect stars. Works offline.",
   "lang": "en-IN",
   "dir": "ltr",
   "start_url": "./",

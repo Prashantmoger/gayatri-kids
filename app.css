@@ -1,4 +1,4 @@
-@font-face{font-family:'Baloo 2';src:url('fonts/baloo2-gayatri.woff2') format('woff2');font-weight:400 800;font-style:normal;font-display:swap}
+@font-face{font-family:'Baloo 2';src:url('fonts/baloo2-mantras.woff2') format('woff2');font-weight:400 800;font-style:normal;font-display:swap}
 :root{
   --bg1:#FFF4D8;--bg2:#FFDDB0;--orange:#FF8A1F;--deep:#E8590C;--yellow:#FFC83D;--pink:#FF6F91;
   --teal:#16B3A3;--purple:#8B6CEF;--blue:#3FA7F5;--green:#3DBE55;--ink:#5A2D0C;--card:#FFFDF6;
@@ -255,3 +255,104 @@ svg{display:block}
 .home .mascot-wrap{width:min(64vw,250px);margin-top:-22px}
 .deity .halo-rays,.pic .halo-rays{transform-box:fill-box;transform-origin:center}
 .deity-badge .halo-rays{animation:none}
+/* ================= v2: Little Mantras library ================= */
+.lib .home-top{align-items:center;justify-content:space-between;gap:8px;min-height:84px}
+.lib .app-title{margin:0;flex:1;display:flex;align-items:center;justify-content:center;gap:6px}
+.lib .app-title .om{font-size:36px}
+.lib .app-title h1{font-size:27px;line-height:1.1}
+.stars-btn{min-width:80px;height:80px;border-radius:40px;background:#fff;box-shadow:var(--shadow);display:flex;align-items:center;justify-content:center;gap:2px;padding:0 10px;flex:none;font-size:26px;font-weight:800;color:var(--deep)}
+.stars-btn svg{width:36px;height:36px}
+.lib .gear{width:80px;height:80px;flex:none}
+.mgrid{width:100%;display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.mcard{position:relative;border-radius:30px;overflow:hidden;display:flex;flex-direction:column;align-items:stretch;box-shadow:var(--shadow);transition:transform .12s;color:#fff;min-height:200px;text-align:left}
+.mcard:active{transform:translateY(4px) scale(.97)}
+.mcard .mpic{display:block;margin:8px 8px 0;border-radius:22px;overflow:hidden;aspect-ratio:1;background:#fff;box-shadow:inset 0 0 0 3px rgba(255,255,255,.6)}
+.mcard .mpic svg{width:100%;height:100%;display:block}
+.mcard .minfo{display:flex;flex-direction:column;gap:2px;padding:6px 12px 10px}
+.mcard .mname{font-size:19px;font-weight:800;line-height:1.1;text-shadow:0 2px 0 rgba(0,0,0,.18);min-height:42px;display:flex;align-items:center}
+.mcard .mmeta{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.star-chip{display:inline-flex;align-items:center;gap:3px;background:#fff;color:var(--deep);border-radius:999px;padding:1px 10px 0 4px;font-size:18px}
+.star-chip svg{width:24px;height:24px}
+.tag{display:inline-block;background:rgba(255,255,255,.92);color:#5B3FA8;border-radius:999px;padding:1px 9px 0;font-size:13px;font-weight:800;white-space:nowrap}
+.mcard.wide{grid-column:1/-1;flex-direction:row;align-items:center;min-height:150px}
+.mcard.wide .mpic{width:150px;flex:none;margin:8px}
+.mcard.wide .minfo{flex:1;padding:8px 14px 8px 4px;gap:6px}
+.mcard.wide .mname{font-size:24px;min-height:0}
+.jprog{display:flex;align-items:center;gap:8px;width:100%}
+.jbar{flex:1;height:14px;border-radius:999px;background:rgba(255,255,255,.45);overflow:hidden;display:block}
+.jbar>span{display:block;height:100%;background:#FFE066;border-radius:999px;min-width:6px}
+.jtxt{font-weight:800;font-size:16px;white-space:nowrap}
+/* hub */
+.hub .hubpic{max-width:360px}
+.hub-title{text-align:center;display:flex;flex-direction:column;align-items:center;gap:2px}
+.hub-title h1{margin:0;font-size:30px;font-weight:800;line-height:1.1}
+.hub-line{font-size:22px;font-weight:700;color:var(--deep);text-align:center;margin-top:-4px}
+.hub .tiles{gap:14px}
+.hub .tile{aspect-ratio:auto;min-height:124px}
+.hub .tile .ic{width:72px;height:72px}
+/* two half-line Chalisa verses */
+.deva.two{font-size:23px;line-height:1.4;display:flex;flex-direction:column;align-items:center}
+.chunks.words{flex-direction:column;align-items:center;gap:6px}
+.chunks.words .half{display:flex;flex-wrap:wrap;justify-content:center;gap:5px 6px}
+.chunks.words .ch{font-size:18px;padding:4px 8px 1px;border-radius:12px}
+.chunks.words .ch.on{transform:scale(1.12)}
+.chalisa .meaning{font-size:16px}
+.vstep{display:flex;align-items:center;justify-content:center;gap:10px;width:100%}
+.vstep .lp{display:grid;place-items:center;color:var(--deep)}
+.vstep .lp svg{width:40px;height:40px}
+.vstep #vnext svg{transform:scaleX(-1)}
+.vstep .lp:disabled{opacity:.35}
+.vlabel{min-width:150px;text-align:center;background:rgba(255,255,255,.75);border-radius:22px;padding:6px 14px 4px;display:flex;flex-direction:column;line-height:1.15}
+.vlabel b{font-size:22px;color:var(--deep)}
+.vlabel span{font-size:15px;color:#9A5A2A;font-weight:700}
+#lall span{font-size:22px}
+#lall svg{width:34px;height:34px}
+/* journey */
+.journey .jhead{width:100%;text-align:center}
+.journey .jhead h1{margin:0 0 6px;font-size:28px;font-weight:800}
+.jprog.big .jbar{height:18px;background:#FBE3BD}
+.jprog.big .jbar>span{background:linear-gradient(90deg,#FFB547,#FF7A1A)}
+.jprog.big .jtxt{font-size:20px;color:var(--deep)}
+.jmap{position:relative;width:100%;margin-top:4px}
+.jpath{position:absolute;inset:0;width:100%;height:100%}
+.jstep,.jgoal{position:absolute;width:80px;height:80px;margin:-40px 0 0 -40px;border-radius:50%;display:grid;place-items:center}
+.jstep{background:#fff;box-shadow:var(--shadow);font-weight:800;color:var(--deep);transition:transform .12s}
+.jstep:active{transform:scale(.94)}
+.jstep .jn{font-size:24px;position:relative;z-index:1}
+.jstep.done{background:linear-gradient(160deg,#FFE066,#FFB020)}
+.jstep.done>svg{position:absolute;top:5px;left:19px;width:42px;height:42px}
+.jstep.done .jn{font-size:19px;color:#7A3A00;position:absolute;bottom:6px;left:0;right:0;text-align:center}
+.jstep.open{background:linear-gradient(160deg,#FFB067,#E8541E);color:#fff}
+.jstep.locked{background:#FFF3DE;color:#D9B48C;box-shadow:0 3px 0 rgba(120,50,0,.08)}
+.jstep.cur{animation:invite 1.6s ease-in-out infinite}
+.jhero{position:absolute;width:54px;height:54px;top:-40px;right:-18px;z-index:2;border-radius:50%;overflow:hidden;border:3px solid #fff;box-shadow:0 4px 10px rgba(0,0,0,.2);animation:bob 1.8s ease-in-out infinite;background:#BFE6FF}
+.jhero svg{width:100%;height:100%}
+.jgoal{background:#fff;box-shadow:var(--shadow)}
+.jgoal svg{width:62px;height:62px}
+.jgoal.won{background:linear-gradient(160deg,#FFE066,#FFB020)}
+/* clap for Chalisa words */
+.circles.words{gap:8px;max-width:380px}
+.circles.words .circ{width:80px;height:80px;font-size:21px;line-height:1;text-align:center;padding:0 4px;word-break:break-word}
+.clap.chalisa .pic.small{max-width:240px}
+/* stars */
+.mstars{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;width:100%}
+.mstar{display:flex;flex-direction:column;align-items:center;gap:2px;min-height:112px;border-radius:24px;background:rgba(255,255,255,.7);padding:6px 0 4px;box-shadow:0 3px 0 rgba(120,50,0,.08)}
+.mstar b{font-size:22px;color:var(--deep)}
+/* parent */
+.mchips{display:flex;flex-wrap:wrap;gap:8px}
+.mchips .pbtn{flex:1 1 30%;min-width:96px}
+.plist{list-style:none;margin:8px 0;padding:0}
+.plist li{display:flex;justify-content:space-between;border-bottom:1px dashed #F3D6AE;padding:4px 0;font-size:15px}
+#recrows{max-height:none}
+@media (max-width:360px){.mcard .mname{font-size:17px}.lib .app-title h1{font-size:23px}}
+.listen.chalisa .pic.small,.learn-line.chalisa .pic.small{max-width:230px}
+.chalisa .deva.two{font-size:20px;line-height:1.35}
+.listen.chalisa .chunks.words .ch,.learn-line.chalisa .chunks.words .ch{font-size:16px;padding:3px 7px 0}
+.listen.chalisa,.learn-line.chalisa,.clap.chalisa{gap:9px}
+.listen.chalisa .controls{padding-top:0}
+.listen.chalisa .play-btn{width:100px;height:100px}
+.hdots{display:flex;gap:8px;justify-content:center}
+.hdot{width:14px;height:14px;border-radius:50%;background:#F3D6AE}
+.hdot.on{background:var(--teal)}
+.circles.words{min-height:0}
+.clap.chalisa .circles.words .circ{font-size:20px}

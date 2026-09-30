@@ -1,13 +1,13 @@
-/* Gayatri Kids service worker: cache-first, fully offline. Bump VERSION when files change. */
-const VERSION = 'v1';
-const CACHE = 'gayatri-kids-' + VERSION;
+/* Little Mantras service worker: cache-first, fully offline. Bump VERSION when files change. */
+const VERSION = 'v2';
+const CACHE = 'little-mantras-' + VERSION;
 const ASSETS = [
   './',
   'index.html',
   'app.css',
   'app.js',
   'manifest.webmanifest',
-  'fonts/baloo2-gayatri.woff2',
+  'fonts/baloo2-mantras.woff2',
   'icons/icon-192.png',
   'icons/icon-512.png',
   'icons/maskable-512.png',
@@ -24,7 +24,7 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k.startsWith('gayatri-kids-') && k !== CACHE).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => (k.startsWith('gayatri-kids-') || k.startsWith('little-mantras-')) && k !== CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
