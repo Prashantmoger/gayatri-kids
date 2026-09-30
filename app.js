@@ -153,7 +153,95 @@ function diya(x, y, s, u) {
     '<path d="M-26 -12 Q0 -16 26 -12 Q0 -6 -26 -12Z" fill="#F08A4B"/></g>';
 }
 const diyaDefs = u => '<radialGradient id="' + u + 'dg"><stop offset="0" stop-color="#FFF3A0" stop-opacity=".95"/><stop offset="1" stop-color="#FFC83D" stop-opacity="0"/></radialGradient>';
-const PIC_LABEL = { sunrise: 'Sun rising over the earth and sky', sun: 'Bright shining sun', glow: 'Child sitting quietly in a glowing light', idea: 'Happy child with a bright idea' };
+const PIC_LABEL = { sunrise: 'Sun rising over the earth and sky', sun: 'Surya Dev, the shining Sun god', glow: 'Child sitting quietly in a glowing light', idea: 'Happy child with a bright idea' };
+
+/* ------------------------------------------------------------------ */
+/* Surya Dev (Sun god) — deity of the Gayatri Mantra (Savitr/Surya).   */
+/* Iconography: golden crown (kirita), radiant sun-disc halo, two       */
+/* pink lotuses held at shoulder height, kundala earrings, red tilak,  */
+/* sacred thread, saffron-red garments. Drawn friendly for small kids. */
+/* ------------------------------------------------------------------ */
+function lotusFlower(x, y, s) {
+  let p = '<g transform="translate(' + x + ' ' + y + ') scale(' + s + ')">';
+  [-52, -26, 26, 52, 0].forEach(a => {
+    p += '<ellipse cx="0" cy="-11" rx="5.5" ry="12" fill="' + (a === 0 ? '#FF6F91' : '#FF9BB5') + '" stroke="#D94A73" stroke-width="1.2" transform="rotate(' + a + ' 0 2)"/>';
+  });
+  return p + '<path d="M-10 2 Q0 8 10 2 Q0 5 -10 2Z" fill="#3DBE55"/></g>';
+}
+function suryaGroup(u, opts) {
+  opts = opts || {};
+  const skin = '#F2A65A', skinLine = '#C9772E';
+  let rays = '';
+  for (let i = 0; i < 16; i++) {
+    const a = i * 22.5;
+    rays += '<path d="M100 2 L108 20 L92 20Z" fill="' + (i % 2 ? '#FFB02E' : '#FF8A1F') + '" transform="rotate(' + a + ' 100 86)"/>';
+  }
+  const arm = side => {
+    const m = side < 0 ? '' : ' transform="translate(200 0) scale(-1 1)"';
+    return '<g' + m + '>' +
+      '<path d="M70 152 Q54 162 50 178" fill="none" stroke="' + skinLine + '" stroke-width="17" stroke-linecap="round"/>' +
+      '<path d="M70 152 Q54 162 50 178" fill="none" stroke="' + skin + '" stroke-width="14" stroke-linecap="round"/>' +
+      '<path d="M50 178 Q40 162 44 136" fill="none" stroke="' + skinLine + '" stroke-width="15" stroke-linecap="round"/>' +
+      '<path d="M50 178 Q40 162 44 136" fill="none" stroke="' + skin + '" stroke-width="12" stroke-linecap="round"/>' +
+      '<path d="M56 160 l9 -5" stroke="#FFD24A" stroke-width="5" stroke-linecap="round"/>' +
+      '<path d="M41 150 l9 2" stroke="#FFD24A" stroke-width="4" stroke-linecap="round"/>' +
+      '<path d="M45 132 Q43 118 44 104" fill="none" stroke="#2E9E44" stroke-width="3"/>' +
+      '<circle cx="44" cy="134" r="7" fill="' + skin + '" stroke="' + skinLine + '" stroke-width="1.5"/>' +
+      lotusFlower(44, 104, 1.05) + '</g>';
+  };
+  return '<defs>' +
+      '<radialGradient id="' + u + 'halo" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#FFFBE0"/><stop offset=".55" stop-color="#FFE27A"/><stop offset="1" stop-color="#FFB030"/></radialGradient>' +
+      '<linearGradient id="' + u + 'gold" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFE680"/><stop offset="1" stop-color="#F2A900"/></linearGradient>' +
+      '<linearGradient id="' + u + 'robe" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FF7A1A"/><stop offset="1" stop-color="#E0431B"/></linearGradient>' +
+    '</defs>' +
+    '<g class="halo-rays">' + rays + '</g>' +
+    '<circle cx="100" cy="86" r="68" fill="url(#' + u + 'halo)" stroke="#FF9F1C" stroke-width="3"/>' +
+    '<circle cx="100" cy="86" r="56" fill="none" stroke="#FFF3B0" stroke-width="2" opacity=".8"/>' +
+    /* torso + garments */
+    '<path d="M58 200 Q56 156 76 146 L124 146 Q144 156 142 200Z" fill="' + skin + '" stroke="' + skinLine + '" stroke-width="1.5"/>' +
+    '<path d="M58 200 Q56 170 66 158 Q84 180 100 181 Q116 180 134 158 Q144 170 142 200Z" fill="url(#' + u + 'robe)"/>' +
+    '<path d="M60 170 Q100 196 140 170" fill="none" stroke="#FFD24A" stroke-width="3" opacity=".9"/>' +
+    '<path d="M68 190 H132" stroke="#FFD24A" stroke-width="4"/>' +
+    '<path d="M84 148 Q98 170 122 196" fill="none" stroke="#FFF4D6" stroke-width="2.5"/>' +
+    arm(-1) + arm(1) +
+    /* neck, necklace */
+    '<rect x="91" y="118" width="18" height="30" rx="6" fill="' + skin + '"/>' +
+    '<path d="M80 146 Q100 170 120 146" fill="none" stroke="url(#' + u + 'gold)" stroke-width="6" stroke-linecap="round"/>' +
+    '<circle cx="100" cy="160" r="5" fill="#E53935" stroke="#FFD24A" stroke-width="2"/>' +
+    /* head */
+    '<path d="M77 90 Q67 104 72 116 Q64 124 70 134 Q74 142 81 137 Q76 129 81 123 Q76 113 84 100Z" fill="#2B1A10"/>' +
+    '<path d="M123 90 Q133 104 128 116 Q136 124 130 134 Q126 142 119 137 Q124 129 119 123 Q124 113 116 100Z" fill="#2B1A10"/>' +
+    '<circle cx="100" cy="100" r="27" fill="' + skin + '" stroke="' + skinLine + '" stroke-width="1.5"/>' +
+    '<circle cx="73" cy="104" r="5" fill="' + skin + '" stroke="' + skinLine + '" stroke-width="1.2"/><circle cx="127" cy="104" r="5" fill="' + skin + '" stroke="' + skinLine + '" stroke-width="1.2"/>' +
+    '<circle cx="72" cy="115" r="5.5" fill="none" stroke="#FFD24A" stroke-width="3"/><circle cx="128" cy="115" r="5.5" fill="none" stroke="#FFD24A" stroke-width="3"/>' +
+    /* crown (kirita mukuta) */
+    '<path d="M68 82 Q62 70 70 62 Q74 72 80 76Z" fill="url(#' + u + 'gold)" stroke="#D08A00" stroke-width="1.5"/>' +
+    '<path d="M132 82 Q138 70 130 62 Q126 72 120 76Z" fill="url(#' + u + 'gold)" stroke="#D08A00" stroke-width="1.5"/>' +
+    '<path d="M77 84 L81 56 L90 50 L93 38 L100 22 L107 38 L110 50 L119 56 L123 84Z" fill="url(#' + u + 'gold)" stroke="#D08A00" stroke-width="2" stroke-linejoin="round"/>' +
+    '<path d="M81 56 H119 M90 50 H110" stroke="#D08A00" stroke-width="1.6"/>' +
+    '<path d="M93 38 H107" stroke="#D08A00" stroke-width="1.4"/>' +
+    '<rect x="72" y="76" width="56" height="10" rx="5" fill="#FFD24A" stroke="#D08A00" stroke-width="2"/>' +
+    '<circle cx="100" cy="67" r="7" fill="#E53935" stroke="#FFF3B0" stroke-width="2"/>' +
+    '<circle cx="86" cy="68" r="2.5" fill="#2EC4B6"/><circle cx="114" cy="68" r="2.5" fill="#2EC4B6"/><circle cx="100" cy="44" r="2.8" fill="#E53935"/>' +
+    '<circle cx="86" cy="81" r="2.6" fill="#E53935"/><circle cx="100" cy="81" r="2.6" fill="#2EC4B6"/><circle cx="114" cy="81" r="2.6" fill="#E53935"/>' +
+    '<circle cx="100" cy="19" r="4" fill="#FFD24A" stroke="#D08A00" stroke-width="1.5"/>' +
+    /* face */
+    '<path d="M100 88 v7" stroke="#E53935" stroke-width="3.2" stroke-linecap="round"/>' +
+    '<path d="M86 94 q5 -3 9 0M105 94 q5 -3 9 0" fill="none" stroke="#3A1E0E" stroke-width="2" stroke-linecap="round"/>' +
+    '<g class="eyes"><ellipse cx="90.5" cy="102" rx="3.6" ry="4.6" fill="#3A1E0E"/><ellipse cx="109.5" cy="102" rx="3.6" ry="4.6" fill="#3A1E0E"/>' +
+    '<circle cx="91.6" cy="100.4" r="1.3" fill="#fff"/><circle cx="110.6" cy="100.4" r="1.3" fill="#fff"/></g>' +
+    '<circle cx="84" cy="112" r="4.5" fill="#FF6F91" opacity=".35"/><circle cx="116" cy="112" r="4.5" fill="#FF6F91" opacity=".35"/>' +
+    '<path d="M99 106 q1 3 2 0" fill="none" stroke="' + skinLine + '" stroke-width="1.5" stroke-linecap="round"/>' +
+    '<path d="M92 114 Q100 121 108 114" fill="none" stroke="#8A2E12" stroke-width="2.6" stroke-linecap="round"/>';
+}
+/* Full illustration (home hero) */
+function suryaSVG(label) {
+  return '<svg class="deity" viewBox="0 0 200 200" role="img" aria-label="' + (label || 'Surya Dev, the Sun god') + '">' + suryaGroup(uid()) + '</svg>';
+}
+/* Round badge for activity screen headers (head, crown and halo) */
+function suryaBadge() {
+  return '<svg viewBox="42 14 116 116" role="img" aria-label="Surya Dev">' + suryaGroup(uid()) + '</svg>';
+}
 function picture(name) {
   const u = uid();
   const st = (x, y, R, r, fill, cls) => '<path class="tw' + (cls ? ' ' + cls : '') + '" d="' + starPath(x, y, R, r) + '" fill="' + fill + '"/>';
@@ -169,11 +257,11 @@ function picture(name) {
       '<path d="M0 172 Q90 138 180 170 T300 166 V200 H0Z" fill="#43AE4A"/>' +
       '<circle cx="40" cy="176" r="5" fill="#FF6F91"/><circle cx="52" cy="182" r="4" fill="#FFC83D"/><circle cx="252" cy="182" r="5" fill="#FF6F91"/>';
   } else if (name === 'sun') {
-    s += '<defs><radialGradient id="' + u + 'b" cx="50%" cy="50%" r="75%"><stop offset="0" stop-color="#FFF7C8"/><stop offset=".6" stop-color="#FFD98A"/><stop offset="1" stop-color="#FFAA55"/></radialGradient></defs>' +
+    s += '<defs><radialGradient id="' + u + 'b" cx="50%" cy="45%" r="75%"><stop offset="0" stop-color="#FFF7C8"/><stop offset=".6" stop-color="#FFD98A"/><stop offset="1" stop-color="#FFAA55"/></radialGradient></defs>' +
       '<rect width="300" height="200" fill="url(#' + u + 'b)"/>' +
-      '<circle cx="150" cy="100" r="92" fill="#FFF3B0" opacity=".55" class="pulse-glow"/>' +
-      sunFace(150, 100, 54, u, { raysClass: 'spin-slow' }) +
-      st(40, 40, 10, 4, '#fff') + st(262, 44, 9, 3.6, '#fff', 'd2') + st(50, 160, 8, 3.2, '#fff', 'd3') + st(254, 160, 10, 4, '#fff');
+      cloud(22, 168, 0.8) + cloud(236, 172, 0.8) +
+      '<g transform="translate(50 -2) scale(1.02)">' + suryaGroup(u) + '</g>' +
+      st(34, 40, 10, 4, '#fff') + st(266, 44, 9, 3.6, '#fff', 'd2') + st(40, 120, 7, 3, '#fff', 'd3') + st(262, 118, 8, 3.2, '#fff');
   } else if (name === 'glow') {
     s += '<defs><linearGradient id="' + u + 'g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFD7A0"/><stop offset="1" stop-color="#FFB27A"/></linearGradient>' +
       '<radialGradient id="' + u + 'h"><stop offset="0" stop-color="#FFFBE0"/><stop offset=".5" stop-color="#FFE9A0" stop-opacity=".9"/><stop offset="1" stop-color="#FFD27A" stop-opacity="0"/></radialGradient>' +
@@ -501,7 +589,7 @@ async function keepAwake(on) {
 function topbar(title, backTo) {
   const isBack = backTo && backTo !== 'home';
   return '<div class="topbar"><button class="round-btn" data-nav="' + (backTo || 'home') + '" aria-label="' + (isBack ? 'Back' : 'Home') + '">' + (isBack ? ICON.back : ICON.home) + '</button>' +
-    '<div class="title-chip"><span>' + esc(title) + '</span></div><div class="spacer"></div></div>';
+    '<div class="title-chip"><span>' + esc(title) + '</span></div><div class="deity-badge">' + suryaBadge() + '</div></div>';
 }
 function chunksHTML(li) {
   let k = 0;
@@ -609,7 +697,7 @@ window.addEventListener('hashchange', route);
 function renderHome() {
   app.innerHTML = '<section class="screen home">' +
     '<div class="home-top"><button class="gear" data-nav="parent" aria-label="Grown-ups area">' + ICON.gear + '</button></div>' +
-    '<div class="mascot-wrap">' + mascotSVG() + '</div>' +
+    '<div class="mascot-wrap">' + suryaSVG() + '</div>' +
     '<div class="app-title"><div class="om" lang="sa">ॐ</div><h1>Gayatri Mantra</h1></div>' +
     '<div class="tiles">' +
       '<button class="tile t-listen" data-nav="listen" aria-label="Listen">' + TILE_ICON.listen + '<span class="lbl">Listen</span></button>' +

@@ -7,6 +7,9 @@ No ads, no accounts, no links out, no internet needed after the first visit.
 > Om Bhur Bhuvah Svah · Tat Savitur Varenyam · Bhargo Devasya Dheemahi · Dhiyo Yo Nah Prachodayat
 > *We pray to the bright Sun to make our minds clever and kind.* (Rig Veda 3.62.10)
 
+## Deity art
+Surya Dev (the Sun god, Savitr) – the deity of the Gayatri Mantra – is drawn in SVG with his traditional iconography: golden kirita crown, radiant sun-disc halo, two pink lotuses held at shoulder height, kundala earrings, red tilak, sacred thread and saffron-red garments. He appears large on the home screen, as a round badge at the top of every activity screen, and as the picture for line 2 (“Tat Savitur Varenyam”).
+
 ## Activities
 - **Listen** – plays the whole mantra line by line with karaoke-style syllable highlighting, a picture per line, and a bead counter (1 / 3 / 11 / 21 repeats, set by a grown-up).
 - **Learn a line** – hear a line, then “Your turn!” (big microphone animation, no scoring), then a star. Line 2 opens after line 1 is practised, and so on.
