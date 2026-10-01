@@ -47,7 +47,7 @@ The child taps a flower, or drags it, and it floats to the deity’s feet. The d
 Offered flowers stay at the deity’s feet. They are saved per mantra and shown on the mantra page with a “flowers offered” count, and as a small count and pile on the home card.
 
 ## Activities (for each mantra)
-- **Listen**: karaoke-style highlighting of syllables (or words, for the Chalisa) with a bead counter (1 / 3 / 11 / 21 repeats). For the Hanuman Chalisa you can play everything, or pick a verse with the arrows and play from there.
+- **Listen**: a calm recorded voice with karaoke-style highlighting of syllables (or words, for the Chalisa) that follows the voice, and a bead counter (1 / 3 / 11 / 21 repeats). For the Hanuman Chalisa you can play everything, or pick a verse with the arrows and play from there.
 - **Learn**: hear a line, then “Your turn!” (no scoring), then offer a flower and get a star. Each line opens after the one before. For the Chalisa this is **Hanuman’s journey**: 43 stepping stones on a winding path, from Doha 1 to Lord Rama’s temple. Each verse is shown as two half-lines with a short kid-level meaning.
 - **My stars**: total stars, stars per mantra, and a sticker collection.
 - **Grown-ups area** (tap the gear at the top right):
@@ -56,7 +56,19 @@ Offered flowers stay at the deity’s feet. They are saved per mantra and shown 
   - Read the meanings aloud; sources are included.
 
 Progress (stars, practised lines, flowers offered) is saved per mantra in localStorage (`little-mantras-state-v2`). Existing Gayatri progress (`gayatri-kids-state-v1`) and recordings (`line0…line3`, `full`) are migrated automatically on first launch.
-Without a recording, the built-in voice is used (Hindi hi-IN if available, slow rate 0.6).
+Without a recording, the bundled AI voice is used (see **Voice** below). The phone’s built-in voice (Hindi hi-IN if available, slow rate 0.6) is only a last fallback.
+
+## Voice
+Every line plays in a gentle recorded voice, so the app sounds the same on every phone and works offline:
+1. the parent’s own recording of that line (grown-ups area), if there is one;
+2. otherwise the bundled **AI voice** (“Monika Sogam” from the ElevenLabs Voice Library, model `eleven_v3`): one MP3 per line, and one per Chalisa verse (61 files in `audio/<mantra>/NN.mp3`, for example `audio/gayatri/00.mp3` and `audio/chalisa/42.mp3`);
+3. otherwise the built-in browser voice (speechSynthesis), and if there is none, silent highlighting.
+
+Listen plays the line files one after another (a parent’s full-mantra recording still comes first if it exists), so there are no separate full-mantra tracks.
+The karaoke highlight follows the MP3. Each syllable or word start time was found by forced alignment of the audio against the app’s own syllables/words (`VOICE_T` in `app.js`).
+Rendering: Devanagari text with “…” pauses, with the tag `[softly, gently, warm and kind, slow devotional chant]`, speed 0.8, stability 1.0, similarity 0.8, `language_code` hi. Each line was checked with Whisper large-v3 and retaken where needed. ॐ is spoken “Om”. Final short “a” sounds are kept in the Sanskrit lines. A Hindi voice tends to drop them, so for four lines the input spelling was nudged (शिवाया, वक्रतुण्डा, देवा, and “Urvaarukamiva” in Roman letters). Each was then checked by forced alignment.
+Files: mono, 24 kHz, 48 kbps CBR MP3, loudness-normalised to −16 LUFS, about 2.4 MB in total. The service worker precaches all of them.
+Credit (also shown in the grown-ups area): Voice: AI voice (ElevenLabs, "Monika Sogam"). The audio was generated on an ElevenLabs paid (Starter) plan, which allows commercial use.
 
 ## Text notes
 Texts were checked against several sources (Rig Veda samhita text, sanskritdocuments.org, Gita Press–style Chalisa editions, stotra.in, shlokam.org). Where editions differ, the app uses these readings:
@@ -72,9 +84,11 @@ Texts were checked against several sources (Rig Veda samhita text, sanskritdocum
 
 ## Publish on GitHub Pages
 Everything uses relative paths, so it works from `https://<user>.github.io/<repo>/`. Push `main`, then set GitHub → Settings → Pages → Deploy from branch: main / (root).
-When you change any file, bump `VERSION` in `sw.js` (now `v3`) so installed copies update.
+When you change any file, bump `VERSION` in `sw.js` (now `v4`) so installed copies update. New audio files must also be added to the `AUDIO` list in `sw.js`.
 
 ## Files
-`index.html`, `app.css`, `app.js`, `manifest.webmanifest`, `sw.js`, `icons/` (192, 512, maskable 512, apple-touch, favicon), `fonts/baloo2-mantras.woff2` (subset of Baloo 2 with the full Devanagari block, SIL OFL 1.1; see `fonts/OFL.txt`), `.nojekyll`.
+`index.html`, `app.css`, `app.js`, `manifest.webmanifest`, `sw.js`, `audio/` (61 voice MP3s), `icons/` (192, 512, maskable 512, apple-touch, favicon), `fonts/baloo2-mantras.woff2` (subset of Baloo 2 with the full Devanagari block, SIL OFL 1.1; see `fonts/OFL.txt`), `.nojekyll`.
+
+Size: about 2.9 MB in total (the voice is about 2.4 MB of that; v3 without the voice was 0.5 MB).
 
 Privacy: no analytics, and no network requests beyond the app’s own files. Recordings and progress never leave the device.

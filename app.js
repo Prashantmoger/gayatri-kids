@@ -1019,19 +1019,51 @@ function segmentsFor(info, m, lineIdxs) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Player: recordings first, then speechSynthesis, then silent timing  */
+/* Player: parent recording first, then the bundled AI voice (Monika   */
+/* MP3s), then speechSynthesis, then silent timing                      */
 /* ------------------------------------------------------------------ */
 const Player = {
-  tok: 0, audio: null,
+  tok: 0, audio: null, el: null, playLog: [],
   stop() {
     this.tok++;
     try { if ('speechSynthesis' in window) speechSynthesis.cancel(); } catch (e) {}
     if (this.audio) { try { this.audio.pause(); } catch (e) {} this.audio = null; }
   },
-  begin() { this.stop(); return this.tok; }
+  begin() { this.stop(); return this.tok; },
+  /* one shared <audio> element, unlocked on the first touch, so iOS/Android allow later play() calls */
+  element() {
+    if (!this.el) { try { this.el = new Audio(); this.el.preload = 'auto'; } catch (e) { this.el = null; } }
+    return this.el;
+  },
+  log(src) { this.playLog.push(src); if (this.playLog.length > 200) this.playLog.shift(); }
 };
+const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
+let audioUnlocked = false;
+document.addEventListener('pointerdown', () => {
+  if (audioUnlocked) return; audioUnlocked = true;
+  const a = Player.element(); if (!a || Player.audio) return;
+  try { a.muted = true; a.src = SILENT_WAV; const p = a.play(); if (p && p.then) p.then(() => { if (!Player.audio) a.pause(); a.muted = false; }, () => { a.muted = false; }); else a.muted = false; } catch (e) { a.muted = false; }
+}, { passive: true, capture: true });
 const alive = tok => tok === Player.tok;
 const sleep = (ms, tok) => new Promise(res => { const t0 = performance.now(); const iv = setInterval(() => { if (!alive(tok) || performance.now() - t0 >= ms) { clearInterval(iv); res(alive(tok)); } }, 50); });
+
+/* Bundled AI voice ("Monika Sogam", ElevenLabs eleven_v3): one MP3 per line/verse in audio/<id>/NN.mp3.
+   VOICE_T[id][line] = [duration, speechStart, speechEnd, chunk start times...] from forced alignment,
+   so the karaoke highlight follows the real voice. Files are precached by the service worker. */
+const voiceUrl = (id, li) => 'audio/' + id + '/' + String(li).padStart(2, '0') + '.mp3';
+const hasVoice = (id, li) => !!(VOICE_T[id] && VOICE_T[id][li]);
+const voiceCache = new Map();
+function getVoice(m, li) {
+  if (!hasVoice(m.id, li)) return Promise.resolve(null);
+  const k = m.id + '/' + li;
+  if (voiceCache.has(k)) return voiceCache.get(k);
+  const T = VOICE_T[m.id][li];
+  const p = fetch(voiceUrl(m.id, li)).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.blob(); })
+    .then(b => ({ url: URL.createObjectURL(b), dur: T[0], start: T[1], end: T[2], gaps: [], cuts: T.slice(3) }))
+    .catch(() => { voiceCache.delete(k); return null; });   /* not cached and offline: fall back this time, retry later */
+  voiceCache.set(k, p);
+  return p;
+}
 
 let voices = [];
 function refreshVoices() { try { voices = speechSynthesis.getVoices() || []; } catch (e) { voices = []; } }
@@ -1041,22 +1073,26 @@ function pickVoice() {
     voices.find(v => /^(mr|sa|ne)\b/i.test(v.lang)) || null;
 }
 function voiceStatus() {
-  if (!('speechSynthesis' in window)) return 'This browser has no built-in voice, so syllables light up silently. Please record your voice above.';
+  return 'Lines without your own recording play in the app\u2019s recorded AI voice (Monika), which works offline. ' + ttsStatus();
+}
+function ttsStatus() {
+  if (!('speechSynthesis' in window)) return 'Last fallback: this browser has no built-in voice, so syllables would light up silently.';
   const v = pickVoice();
-  if (v) return 'Built-in voice: ' + v.name + ' (' + v.lang + '), slow speed 0.6.';
-  if (!voices.length) return 'Built-in voice: the phone\u2019s default Hindi (hi-IN) voice is used if it has one.';
-  return 'No Hindi voice found on this device, so an English voice reads the transliteration. Tip: add Hindi in Android Settings \u2192 Text-to-speech, or record your own voice.';
+  if (v) return 'Last fallback, built-in voice: ' + v.name + ' (' + v.lang + '), slow speed 0.6.';
+  if (!voices.length) return 'Last fallback: the phone\u2019s default Hindi (hi-IN) voice, if it has one.';
+  return 'Last fallback: no Hindi built-in voice on this device, so an English voice would read the transliteration.';
 }
 
 function playRecording(info, segs, onProg, tok) {
   return new Promise(res => {
-    const a = new Audio(info.url);
-    a.preload = 'auto';
+    const a = Player.element() || new Audio();
+    const own = {}; a.__own = own; a.muted = false;
+    a.src = info.url;
     Player.audio = a;
     let raf = 0, finished = false, lastL = -1, lastC = -2;
     const emit = (l, c) => { if (l !== lastL || c !== lastC) { lastL = l; lastC = c; onProg(l, c); } };
     const guard = setInterval(() => { if (!alive(tok)) finish(false); }, 200);
-    function finish(v) { if (finished) return; finished = true; cancelAnimationFrame(raf); clearInterval(guard); a.onended = a.onerror = null; try { a.pause(); } catch (e) {} if (Player.audio === a) Player.audio = null; res(v); }
+    function finish(v) { if (finished) return; finished = true; cancelAnimationFrame(raf); clearInterval(guard); if (a.__own === own) { a.onended = a.onerror = null; try { a.pause(); } catch (e) {} if (Player.audio === a) Player.audio = null; } res(v); }
     const tick = () => {
       if (!alive(tok)) return finish(false);
       const t = a.currentTime;
@@ -1115,13 +1151,23 @@ function speakLine(m, li, onChunk, tok) {
   });
 }
 
+/* One line: the parent's recording of this line, else the bundled AI voice, else the built-in voice */
 async function playLine(m, li, onChunk, tok) {
   const info = await getRec(m.id + '/line' + li);
   if (!alive(tok)) return false;
   if (info) {
+    Player.log('rec:' + m.id + '/' + li);
     const r = await playRecording(info, segmentsFor(info, m, [li]), (l, c) => onChunk(c), tok);
     if (r !== 'error') return r;
   }
+  const v = await getVoice(m, li);
+  if (!alive(tok)) return false;
+  if (v) {
+    Player.log('voice:' + m.id + '/' + li);
+    const r = await playRecording(v, [{ line: li, a: v.start, b: v.end, cuts: v.cuts }], (l, c) => onChunk(c), tok);
+    if (r !== 'error') return r;
+  }
+  Player.log('tts:' + m.id + '/' + li);
   return speakLine(m, li, onChunk, tok);
 }
 /* Whole mantra: a parent's full recording if present, else line by line.
@@ -1139,6 +1185,7 @@ async function playFull(m, onProg, tok, from) {
   }
   for (let i = from; i < n; i++) {
     onProg(i, -1);
+    if (i + 1 < n) getVoice(m, i + 1);   /* fetch the next line's MP3 while this one plays */
     const ok = await playLine(m, i, c => onProg(i, c), tok);
     if (!ok || !alive(tok)) return false;
     if (i < n - 1 && !(await sleep(m.kind === 'chalisa' ? 700 : 450, tok))) return false;
@@ -1212,6 +1259,21 @@ const TS = {
     const s = c.createBufferSource(); s.buffer = b; const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.2; bp.frequency.setValueAtTime(400, t); bp.frequency.exponentialRampToValueAtTime(1400, t + 0.6);
     s.connect(bp).connect(this.env(c, t, 0.2, 0.5, 0.05)); s.start(t);
   }
+};
+
+/* ------------------------------------------------------------------ */
+/* Bundled AI voice timings (generated by voice/build.sh, do not edit)  */
+/* [duration, speech start, speech end, start of each chunk] in s      */
+/* ------------------------------------------------------------------ */
+const VOICE_CREDIT = 'Voice: AI voice (ElevenLabs, "Monika Sogam")';
+const VOICE_T = {
+  shiva: [[4.146,0.14,3.9,0.18,2.42,2.64,3.18,3.36,3.61]],
+  gayatri: [[4.344,0.18,4.03,0.22,2.41,2.98,3.22,3.48], [4.42,0.08,3.89,0.12,0.52,0.78,1.0,2.19,2.41,3.36], [5.17,0.14,4.4,0.18,0.58,1.48,1.94,2.36,3.35,3.89,4.09], [6.69,0.22,6.48,0.26,0.56,2.46,2.94,4.97,5.21,5.59,5.75]],
+  ganesha: [[3.205,0.14,3.03,0.18,0.52,0.67,0.97,1.94,2.14,2.42,2.74], [3.339,0.14,3.03,0.18,0.68,0.89,1.31,2.07,2.25,2.43,2.72], [3.14,0.18,2.75,0.22,0.5,0.77,1.65,1.79,1.95,2.23,2.46], [3.65,0.14,3.52,0.18,0.52,0.7,1.06,1.4,2.73,3.01,3.17]],
+  lakshmi: [[7.351,0.16,7.04,0.2,2.36,4.51,4.71,5.07,5.43,6.47,6.65]],
+  saraswati: [[3.65,0.14,3.48,0.18,0.38,0.7,0.86,2.37,2.53,2.81,3.11], [2.594,0.18,2.44,0.22,0.36,0.5,1.45,1.71,1.85,2.05,2.19], [3.17,0.1,2.98,0.14,0.5,0.78,0.98,2.07,2.21,2.51,2.69], [4.05,0.16,3.74,0.2,0.54,0.96,1.14,1.36,2.67,3.09,3.29]],
+  mrityunjaya: [[6.655,0.16,5.86,0.2,3.01,3.55,3.75,4.79,4.97,5.37,5.55], [3.81,0.14,3.62,0.18,0.38,0.68,2.33,2.65,2.85,3.09,3.25], [4.37,0.22,4.06,0.26,0.64,1.04,1.26,1.42,1.6,2.81,3.15,3.37], [4.577,0.14,4.35,0.18,0.64,1.14,1.43,1.77,3.09,3.49,3.75]],
+  chalisa: [[11.73,0.18,11.56,0.22,0.66,1.02,1.56,2.42,3.52,3.94,4.32,4.86,6.57,7.21,7.87,8.33,9.29,9.65,10.35,10.67], [12.53,0.12,12.32,0.16,1.4,1.78,3.44,4.4,4.92,6.89,7.25,7.89,8.51,9.81,10.29,11.03,11.59], [6.05,0.14,5.92,0.18,0.58,1.5,2.0,2.28,3.35,3.67,4.43,4.77,5.21], [6.827,0.16,6.5,0.2,0.8,1.44,2.04,2.32,3.94,4.48,5.35,5.73,6.01], [6.473,0.16,6.14,0.2,1.32,1.88,3.55,4.01,4.95,5.41,5.63], [7.49,0.1,7.08,0.14,0.92,1.48,2.46,4.41,5.11,5.77,6.43], [7.25,0.12,6.98,0.16,0.8,1.4,1.7,2.38,4.19,4.93,5.45,6.25], [5.81,0.16,5.68,0.2,0.78,1.26,1.8,3.29,3.67,4.45,4.87,5.11], [6.658,0.16,6.45,0.2,1.4,2.01,2.33,3.91,4.41,4.91,5.49,5.86], [6.738,0.06,6.51,0.1,0.5,1.18,1.85,2.27,4.01,4.51,5.03,5.66,5.92], [8.61,0.12,8.38,0.16,0.88,1.46,2.2,2.8,5.27,5.85,6.37,7.09,7.63], [6.972,0.14,6.72,0.18,0.86,1.44,2.06,2.52,4.05,4.97,5.57,6.05], [7.317,0.18,6.95,0.22,0.84,1.8,2.37,4.07,4.51,5.43,6.03,6.31], [8.29,0.14,7.38,0.18,0.98,1.96,2.58,4.17,4.55,4.91,5.63,6.37,6.71], [9.103,0.14,9.1,0.18,0.82,1.5,2.97,3.43,5.41,5.75,6.12,7.66,8.1], [6.914,0.18,6.56,0.22,1.28,2.06,3.99,4.63,5.19,5.89], [7.241,0.14,6.93,0.18,0.54,1.38,2.41,2.89,4.25,4.63,5.26,5.56,6.28,6.66], [7.041,0.08,6.65,0.12,0.56,1.44,2.45,3.81,4.33,5.1,5.6,5.96], [8.899,0.08,8.59,0.12,1.18,1.96,3.03,4.97,6.09,7.26,7.66,8.0], [8.45,0.16,8.02,0.2,0.64,1.34,2.2,2.58,4.79,5.67,6.31,6.89,7.29], [7.408,0.08,7.22,0.12,0.56,1.4,1.98,2.34,4.44,4.99,5.49,6.11,6.65], [5.764,0.18,5.53,0.22,0.8,1.37,1.79,1.97,3.21,3.72,4.58,5.06], [6.13,0.14,5.94,0.18,0.8,1.68,1.96,3.61,4.05,4.35,4.71,5.21], [6.45,0.18,6.26,0.22,0.62,0.94,1.56,2.28,3.75,4.03,4.99,5.53,5.77,5.99], [7.661,0.18,7.47,0.22,0.92,1.76,2.89,4.55,5.11,5.94,6.6,6.82], [7.41,0.12,7.22,0.16,0.82,1.68,2.2,2.64,4.21,5.27,5.63,6.31], [8.011,0.2,7.7,0.24,1.18,1.82,2.46,2.88,4.63,5.19,6.47,7.15], [7.89,0.18,7.72,0.22,0.92,1.44,2.58,4.57,4.93,5.35,6.21,6.85,7.11], [8.05,0.14,7.64,0.18,0.54,0.98,1.66,2.78,4.43,4.79,5.23,5.87,6.49,6.91], [8.72,0.18,7.61,0.22,0.78,1.86,2.33,2.85,4.65,5.17,5.69,6.6,6.98], [7.664,0.12,7.33,0.16,0.98,1.4,2.57,4.39,4.8,5.7,6.34], [5.816,0.18,5.57,0.22,0.72,1.1,1.32,1.54,3.15,3.53,4.69,4.99], [5.677,0.12,5.55,0.16,0.6,1.16,1.42,1.77,1.93,3.31,3.55,3.79,4.41,5.0], [7.25,0.16,6.82,0.2,0.82,1.82,2.62,4.19,4.73,5.25,5.85,6.23], [7.949,0.08,7.64,0.12,0.96,1.6,2.38,2.62,4.73,5.21,5.71,6.19,6.55], [5.97,0.12,5.76,0.16,0.74,1.36,1.98,2.26,3.65,4.11,4.53,5.21], [6.162,0.14,5.95,0.18,0.5,1.43,1.85,1.99,3.33,3.93,4.7,5.16,5.46], [7.33,0.12,6.78,0.16,0.84,1.46,2.04,2.38,4.09,4.45,5.13,5.81], [7.241,0.1,7.03,0.14,0.52,0.94,1.5,2.57,4.05,4.57,5.3,6.3,6.46], [6.29,0.14,6.06,0.18,0.54,0.9,1.42,1.96,2.3,3.61,4.33,4.75,5.23,5.59], [5.703,0.16,5.49,0.2,0.5,0.74,1.25,1.81,3.13,3.49,3.92,4.68], [6.732,0.08,6.38,0.12,1.28,1.96,2.32,3.79,4.41,4.99,5.53,5.87], [9.142,0.08,8.97,0.12,0.68,1.28,1.82,2.81,3.31,3.83,4.99,5.35,5.85,6.3,7.24,7.68,8.22,8.48]]
 };
 
 /* ------------------------------------------------------------------ */
@@ -1879,16 +1941,16 @@ async function startRecording(key, onChange, onMsg) {
   } catch (err) {
     const n = err && err.name;
     onMsg(n === 'NotAllowedError' || n === 'SecurityError'
-      ? 'Microphone permission is blocked. Allow the microphone for this app in the browser\u2019s site settings, then try again. Until then the built-in voice is used.'
+      ? 'Microphone permission is blocked. Allow the microphone for this app in the browser\u2019s site settings, then try again. Until then the app\u2019s recorded voice is used.'
       : n === 'NotFoundError' || n === 'OverconstrainedError'
-        ? 'No microphone was found on this device. The built-in voice will be used instead.'
-        : 'The microphone could not be started (' + esc(n || 'error') + '). The built-in voice will be used instead.', true);
+        ? 'No microphone was found on this device. The app\u2019s recorded voice will be used instead.'
+        : 'The microphone could not be started (' + esc(n || 'error') + '). The app\u2019s recorded voice will be used instead.', true);
     return;
   }
   const mime = pickMime();
   let mr;
   try { mr = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream); }
-  catch (e) { stream.getTracks().forEach(t => t.stop()); onMsg('Recording is not supported in this browser. The built-in voice will be used instead.', true); return; }
+  catch (e) { stream.getTracks().forEach(t => t.stop()); onMsg('Recording is not supported in this browser. The app\u2019s recorded voice will be used instead.', true); return; }
   const r = { key, mr, stream, chunks: [], t0: performance.now(), cancelled: false, iv: 0 };
   rec = r;
   mr.ondataavailable = e => { if (e.data && e.data.size) r.chunks.push(e.data); };
@@ -1947,8 +2009,8 @@ function renderParent() {
     '<div class="panel"><h2>Choose a mantra</h2><div class="mchips" role="group" aria-label="Mantra">' + MANTRAS.map(x => '<button class="pbtn' + (x.id === m.id ? ' sel' : '') + '" data-msel="' + x.id + '" aria-pressed="' + (x.id === m.id) + '">' + esc(shortName(x)) + '</button>').join('') + '</div></div>' +
     '<div class="panel"><h2>Your voice – ' + esc(m.name) + '</h2>' +
       '<p>' + (ch ? 'Record each verse slowly and clearly (both half-lines).' : m.lines.length > 1 ? 'Record each line slowly and clearly. For the full mantra, pause briefly between lines so the pictures change at the right time.' : 'Record the mantra slowly and clearly.') + '</p>' +
-      '<div class="note" id="vnote">A recorded parent voice sounds much better than the built-in computer voice. Once saved, it is used for all playback of this mantra.</div>' +
-      (canRecord ? '' : '<div class="note warn" id="nomic" style="margin-top:8px">Recording is not available here (no microphone / MediaRecorder, or the page is not on https). Everything still works with the built-in voice.</div>') +
+      '<div class="note" id="vnote">Your own recording of a line is always used first. Lines you have not recorded play in the app\u2019s recorded AI voice (Monika); the phone\u2019s built-in voice is only a last fallback.</div>' +
+      (canRecord ? '' : '<div class="note warn" id="nomic" style="margin-top:8px">Recording is not available here (no microphone / MediaRecorder, or the page is not on https). Everything still works with the app\u2019s recorded voice.</div>') +
       '<div class="note" id="recmsg" hidden style="margin-top:8px" role="status"></div>' +
       '<div id="recrows"></div>' +
       '<p class="small" id="vstat">' + esc(voiceStatus()) + '</p></div>' +
@@ -1963,7 +2025,8 @@ function renderParent() {
       '<p class="small">' + esc(SOURCES[m.id] || '') + '</p></div>' +
     '<div class="panel"><h2>App</h2><p>Works fully offline once opened. To install: Chrome menu ⋮ → <b>Install app</b> or <b>Add to Home screen</b>.</p>' +
       '<div class="rec-btns"><button class="pbtn" id="install"' + (deferredInstall ? '' : ' hidden') + '>Install app</button></div>' +
-      '<p class="small">No ads, no accounts, no internet needed. Progress and recordings stay on this device only.</p></div>' +
+      '<p class="small">No ads, no accounts, no internet needed. Progress and recordings stay on this device only.</p>' +
+      '<p class="small credit" id="vcredit">' + esc(VOICE_CREDIT) + '</p></div>' +
     '</div></section>';
 
   const msg = (t, warn) => { const x = $('#recmsg'); if (!x) return; x.hidden = false; x.classList.toggle('warn', !!warn); x.innerHTML = t; };
@@ -1975,7 +2038,7 @@ function renderParent() {
     box.innerHTML = keys.map((k, i) => {
       const live = !!(rec && rec.key === k), h = have[k] != null, lab = rowLabel(k, i), sid = 'st-' + k;
       return '<div class="rec-row"><div class="rec-head"><div><b>' + esc(lab[0]) + '</b> <span class="sub">' + esc(lab[1]) + '</span></div>' +
-        '<span class="status' + (live ? ' live' : h ? ' mine' : '') + '" id="' + esc(sid) + '">' + (live ? '\u25CF 0:00' : h ? 'Your voice \u2713 ' + fmtTime(have[k]) : 'Built-in voice') + '</span></div>' +
+        '<span class="status' + (live ? ' live' : h ? ' mine' : '') + '" id="' + esc(sid) + '">' + (live ? '\u25CF 0:00' : h ? 'Your voice \u2713 ' + fmtTime(have[k]) : k.endsWith('/full') ? (hasVoice(m.id, 0) ? 'Monika, line by line' : 'Built-in voice') : hasVoice(m.id, i) ? 'Monika (AI voice)' : 'Built-in voice') + '</span></div>' +
         '<div class="rec-btns">' +
           '<button class="pbtn rec' + (live ? ' on' : '') + '" data-rec="' + k + '"' + (canRecord ? '' : ' disabled') + ' aria-label="' + (live ? 'Stop recording ' : 'Record ') + esc(lab[0]) + '">' + (live ? ICON.stopS + ' Stop' : ICON.recDot + ' Record') + '</button>' +
           '<button class="pbtn" data-play="' + k + '"' + (live ? ' disabled' : '') + ' aria-label="Play ' + esc(lab[0]) + '">' + ICON.playS + ' Play</button>' +
@@ -2010,7 +2073,7 @@ function renderParent() {
       if (b.dataset.confirm !== '1') { b.dataset.confirm = '1'; b.innerHTML = ICON.trash + ' Sure?'; setTimeout(() => { if (b.isConnected) { b.dataset.confirm = ''; b.innerHTML = ICON.trash + ' Delete'; } }, 3500); return; }
       Player.stop();
       try { await DB.del(k); } catch (x) {}
-      invalidateRec(k); msg('Recording deleted. The built-in voice will be used.', false); drawRows();
+      invalidateRec(k); msg('Recording deleted. ' + (hasVoice(m.id, +(k.split('/')[1].slice(4)) || 0) ? 'Monika\u2019s recorded voice' : 'The built-in voice') + ' will be used.', false); drawRows();
     } else if (b.dataset.rep) {
       state.repeat = +b.dataset.rep; save();
       $$('[data-rep]').forEach(x => { const on = +x.dataset.rep === state.repeat; x.classList.toggle('sel', on); x.setAttribute('aria-pressed', on); });
@@ -2035,5 +2098,5 @@ route();
 if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
   window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js', { scope: './' }).catch(() => {}); });
 }
-window.__gk = { MANTRAS, MBY, state: () => state, getRec, segmentsFor, canRecord, DB, recKeysFor, fxLog, sounds: TS.log, REACT };
+window.__gk = { MANTRAS, MBY, state: () => state, getRec, segmentsFor, canRecord, DB, recKeysFor, fxLog, sounds: TS.log, REACT, VOICE_T, voiceUrl, getVoice, player: Player };
 })();
