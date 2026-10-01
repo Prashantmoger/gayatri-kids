@@ -1,5 +1,5 @@
 /* Little Mantras service worker: cache-first, fully offline. Bump VERSION when files change. */
-const VERSION = 'v2';
+const VERSION = 'v3';
 const CACHE = 'little-mantras-' + VERSION;
 const ASSETS = [
   './',
