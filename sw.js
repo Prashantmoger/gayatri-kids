@@ -1,5 +1,5 @@
 /* Little Mantras service worker: cache-first, fully offline. Bump VERSION when files change. */
-const VERSION = 'v4';
+const VERSION = 'v5';
 const CACHE = 'little-mantras-' + VERSION;
 const CORE = [
   './',
@@ -14,7 +14,8 @@ const CORE = [
   'icons/apple-touch-icon.png',
   'icons/favicon-32.png'
 ];
-/* Recorded AI voice (ElevenLabs "Monika Sogam"): one MP3 per line / Chalisa verse */
+/* Recorded AI voice (ElevenLabs "Monika Sogam"): one MP3 per line / Chalisa verse;
+   sung tracks (ElevenLabs Music) for the six short mantras + the Chalisa music bed in audio/sung/ */
 const AUDIO = [
   'audio/shiva/00.mp3',
   'audio/gayatri/00.mp3',
@@ -76,7 +77,14 @@ const AUDIO = [
   'audio/chalisa/39.mp3',
   'audio/chalisa/40.mp3',
   'audio/chalisa/41.mp3',
-  'audio/chalisa/42.mp3'
+  'audio/chalisa/42.mp3',
+  'audio/sung/gayatri.mp3',
+  'audio/sung/ganesha.mp3',
+  'audio/sung/saraswati.mp3',
+  'audio/sung/mrityunjaya.mp3',
+  'audio/sung/shiva.mp3',
+  'audio/sung/lakshmi.mp3',
+  'audio/sung/chalisa-bed.mp3'
 ];
 const ASSETS = CORE.concat(AUDIO);
 

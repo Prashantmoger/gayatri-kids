@@ -127,7 +127,8 @@ const fmtTime = s => { s = Math.max(0, Math.round(s || 0)); return Math.floor(s 
 /* ------------------------------------------------------------------ */
 const STORE_KEY = 'little-mantras-state-v2';
 const OLD_KEY = 'gayatri-kids-state-v1';
-const freshState = () => ({ stars: {}, practised: {}, flowers: {}, unlockAll: false, repeat: 3, lastNew: -1 });
+const LISTEN_STYLES = ['sung', 'chant'];
+const freshState = () => ({ stars: {}, practised: {}, flowers: {}, unlockAll: false, repeat: 3, lastNew: -1, listenStyle: 'sung' });
 function loadState() {
   let st = null;
   try { st = JSON.parse(localStorage.getItem(STORE_KEY) || 'null'); } catch (e) { st = null; }
@@ -151,6 +152,7 @@ function loadState() {
   if (typeof st.practised !== 'object' || !st.practised) st.practised = {};
   if (typeof st.flowers !== 'object' || !st.flowers) st.flowers = {};
   if (REPEAT_OPTIONS.indexOf(st.repeat) < 0) st.repeat = 3;
+  if (LISTEN_STYLES.indexOf(st.listenStyle) < 0) st.listenStyle = 'sung';
   return st;
 }
 let state = loadState();
@@ -1026,6 +1028,7 @@ const Player = {
   tok: 0, audio: null, el: null, playLog: [],
   stop() {
     this.tok++;
+    Bed.stop();
     try { if ('speechSynthesis' in window) speechSynthesis.cancel(); } catch (e) {}
     if (this.audio) { try { this.audio.pause(); } catch (e) {} this.audio = null; }
   },
@@ -1089,22 +1092,22 @@ function playRecording(info, segs, onProg, tok) {
     const own = {}; a.__own = own; a.muted = false;
     a.src = info.url;
     Player.audio = a;
-    let raf = 0, finished = false, lastL = -1, lastC = -2;
-    const emit = (l, c) => { if (l !== lastL || c !== lastC) { lastL = l; lastC = c; onProg(l, c); } };
+    let raf = 0, finished = false, lastL = -1, lastC = -2, lastK = -1;
+    const emit = (l, c, k) => { if (l !== lastL || c !== lastC || k !== lastK) { lastL = l; lastC = c; lastK = k; onProg(l, c, k); } };
     const guard = setInterval(() => { if (!alive(tok)) finish(false); }, 200);
     function finish(v) { if (finished) return; finished = true; cancelAnimationFrame(raf); clearInterval(guard); if (a.__own === own) { a.onended = a.onerror = null; try { a.pause(); } catch (e) {} if (Player.audio === a) Player.audio = null; } res(v); }
     const tick = () => {
       if (!alive(tok)) return finish(false);
       const t = a.currentTime;
-      let seg = segs[0];
-      for (const sg of segs) if (t >= sg.a - 0.15) seg = sg;
+      let seg = segs[0], k = 0;
+      segs.forEach((sg, i) => { if (t >= sg.a - 0.15) { seg = sg; k = i; } });
       let c = -1;
       seg.cuts.forEach((ct, i) => { if (t >= ct - 0.05) c = i; });
       if (t > seg.b + 0.1) c = seg.cuts.length;
-      emit(seg.line, c);
+      emit(seg.line, c, k);
       raf = requestAnimationFrame(tick);
     };
-    a.onended = () => { const last = segs[segs.length - 1]; emit(last.line, last.cuts.length); finish(true); };
+    a.onended = () => { const last = segs[segs.length - 1]; emit(last.line, last.cuts.length, segs.length - 1); finish(true); };
     a.onerror = () => finish('error');
     const p = a.play();
     if (p && p.then) p.then(() => { raf = requestAnimationFrame(tick); }, () => finish('error'));
@@ -1179,6 +1182,7 @@ async function playFull(m, onProg, tok, from) {
     const info = await getRec(m.id + '/full');
     if (!alive(tok)) return false;
     if (info) {
+      Player.log('rec:' + m.id + '/full');
       const r = await playRecording(info, segmentsFor(info, m, m.lines.map((_, i) => i)), onProg, tok);
       if (r !== 'error') return r;
     }
@@ -1186,12 +1190,91 @@ async function playFull(m, onProg, tok, from) {
   for (let i = from; i < n; i++) {
     onProg(i, -1);
     if (i + 1 < n) getVoice(m, i + 1);   /* fetch the next line's MP3 while this one plays */
+    Bed.duck(true);
     const ok = await playLine(m, i, c => onProg(i, c), tok);
+    Bed.duck(false);
     if (!ok || !alive(tok)) return false;
     if (i < n - 1 && !(await sleep(m.kind === 'chalisa' ? 700 : 450, tok))) return false;
   }
   return true;
 }
+
+/* ------------------------------------------------------------------ */
+/* Sung tracks (ElevenLabs Music) for Listen in the six short mantras.  */
+/* SUNG[id] = { d: duration, p: passes (the mantra is sung twice),      */
+/* L: [[line, start, end], ...] for every sung line, in order }.        */
+/* The highlight follows the song: each line lights up while it is sung */
+/* and its syllables are spread over that time.                          */
+/* ------------------------------------------------------------------ */
+const sungUrl = id => 'audio/sung/' + id + '.mp3';
+const hasSung = id => !!(typeof SUNG !== 'undefined' && SUNG[id]);
+const listenSung = () => state.listenStyle !== 'chant';
+const sungCache = new Map();
+function getSung(m) {
+  if (!hasSung(m.id)) return Promise.resolve(null);
+  if (sungCache.has(m.id)) return sungCache.get(m.id);
+  const S = SUNG[m.id];
+  const p = fetch(sungUrl(m.id)).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.blob(); })
+    .then(b => ({ url: URL.createObjectURL(b), dur: S.d, start: 0, end: S.d, gaps: [] }))
+    .catch(() => { sungCache.delete(m.id); return null; });
+  sungCache.set(m.id, p);
+  return p;
+}
+const sungSegs = m => SUNG[m.id].L.map(x => ({ line: x[0], a: x[1], b: x[2], cuts: chunkStarts(m.lines[x[0]], x[1], x[2]) }));
+/* Where Listen's sound comes from: a parent's own full recording first (for a one-line mantra, its line recording),
+   then the sung track (Listen style "Sung"), else Monika's chant line by line. */
+async function listenMode(m) {
+  if (m.kind === 'chalisa') return 'chant';
+  const own = await getRec(m.id + (m.lines.length > 1 ? '/full' : '/line0'));
+  if (own) return 'rec';
+  return listenSung() && hasSung(m.id) ? 'sung' : 'chant';
+}
+async function playSung(m, onProg, tok) {
+  const v = await getSung(m);
+  if (!alive(tok)) return false;
+  if (!v) return 'error';
+  Player.log('sung:' + m.id);
+  return playRecording(v, sungSegs(m), onProg, tok);
+}
+
+/* Soft, loopable music bed under the Hanuman Chalisa in Listen (style "Sung"): Web Audio, looped without gaps,
+   low volume, ducked while Monika sings a verse and gently up again between verses. */
+const BED_GAIN = { free: 0.42, duck: 0.2 };
+const Bed = {
+  buf: null, p: null, src: null, g: null, ducked: false, log: [],
+  load() {
+    if (this.buf) return Promise.resolve(this.buf);
+    if (this.p) return this.p;
+    const c = audioCtx(); if (!c || typeof SUNG_BED === 'undefined') return Promise.resolve(null);
+    this.p = fetch(SUNG_BED).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.arrayBuffer(); })
+      .then(b => new Promise((res, rej) => { const q = c.decodeAudioData(b, res, rej); if (q && q.then) q.then(res, rej); }))
+      .then(b => (this.buf = b)).catch(() => { this.p = null; return null; });
+    return this.p;
+  },
+  async start(tok) {
+    const c = audioCtx(); if (!c || this.src) return;
+    const b = await this.load();
+    if (!b || !alive(tok) || this.src) return;
+    const s = c.createBufferSource(), g = c.createGain(), t = c.currentTime;
+    s.buffer = b; s.loop = true;
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(this.ducked ? BED_GAIN.duck : BED_GAIN.free, t + 2);
+    s.connect(g).connect(c.destination); s.start(t);
+    this.src = s; this.g = g; this.log.push('start');
+  },
+  duck(on) {
+    this.ducked = on;
+    if (!this.g || !actx) return;
+    const t = actx.currentTime; this.g.gain.cancelScheduledValues(t);
+    this.g.gain.setTargetAtTime(on ? BED_GAIN.duck : BED_GAIN.free, t, on ? 0.15 : 0.6);
+  },
+  stop() {
+    this.ducked = false;
+    if (!this.src) return;
+    const s = this.src, g = this.g; this.src = this.g = null; this.log.push('stop');
+    try { const t = actx.currentTime; g.gain.cancelScheduledValues(t); g.gain.setTargetAtTime(0.0001, t, 0.3); s.stop(t + 1.5); } catch (e) { try { s.stop(); } catch (x) {} }
+  },
+  info() { return { playing: !!this.src, gain: this.g ? +this.g.gain.value.toFixed(3) : 0, ducked: this.ducked, loaded: !!this.buf, loop: !!(this.src && this.src.loop), log: this.log.slice(-6) }; }
+};
 
 /* Screen wake lock during long Listen loops (best effort) */
 let wakeLock = null;
@@ -1274,6 +1357,18 @@ const VOICE_T = {
   saraswati: [[3.65,0.14,3.48,0.18,0.38,0.7,0.86,2.37,2.53,2.81,3.11], [2.594,0.18,2.44,0.22,0.36,0.5,1.45,1.71,1.85,2.05,2.19], [3.17,0.1,2.98,0.14,0.5,0.78,0.98,2.07,2.21,2.51,2.69], [4.05,0.16,3.74,0.2,0.54,0.96,1.14,1.36,2.67,3.09,3.29]],
   mrityunjaya: [[6.655,0.16,5.86,0.2,3.01,3.55,3.75,4.79,4.97,5.37,5.55], [3.81,0.14,3.62,0.18,0.38,0.68,2.33,2.65,2.85,3.09,3.25], [4.37,0.22,4.06,0.26,0.64,1.04,1.26,1.42,1.6,2.81,3.15,3.37], [4.577,0.14,4.35,0.18,0.64,1.14,1.43,1.77,3.09,3.49,3.75]],
   chalisa: [[11.73,0.18,11.56,0.22,0.66,1.02,1.56,2.42,3.52,3.94,4.32,4.86,6.57,7.21,7.87,8.33,9.29,9.65,10.35,10.67], [12.53,0.12,12.32,0.16,1.4,1.78,3.44,4.4,4.92,6.89,7.25,7.89,8.51,9.81,10.29,11.03,11.59], [6.05,0.14,5.92,0.18,0.58,1.5,2.0,2.28,3.35,3.67,4.43,4.77,5.21], [6.827,0.16,6.5,0.2,0.8,1.44,2.04,2.32,3.94,4.48,5.35,5.73,6.01], [6.473,0.16,6.14,0.2,1.32,1.88,3.55,4.01,4.95,5.41,5.63], [7.49,0.1,7.08,0.14,0.92,1.48,2.46,4.41,5.11,5.77,6.43], [7.25,0.12,6.98,0.16,0.8,1.4,1.7,2.38,4.19,4.93,5.45,6.25], [5.81,0.16,5.68,0.2,0.78,1.26,1.8,3.29,3.67,4.45,4.87,5.11], [6.658,0.16,6.45,0.2,1.4,2.01,2.33,3.91,4.41,4.91,5.49,5.86], [6.738,0.06,6.51,0.1,0.5,1.18,1.85,2.27,4.01,4.51,5.03,5.66,5.92], [8.61,0.12,8.38,0.16,0.88,1.46,2.2,2.8,5.27,5.85,6.37,7.09,7.63], [6.972,0.14,6.72,0.18,0.86,1.44,2.06,2.52,4.05,4.97,5.57,6.05], [7.317,0.18,6.95,0.22,0.84,1.8,2.37,4.07,4.51,5.43,6.03,6.31], [8.29,0.14,7.38,0.18,0.98,1.96,2.58,4.17,4.55,4.91,5.63,6.37,6.71], [9.103,0.14,9.1,0.18,0.82,1.5,2.97,3.43,5.41,5.75,6.12,7.66,8.1], [6.914,0.18,6.56,0.22,1.28,2.06,3.99,4.63,5.19,5.89], [7.241,0.14,6.93,0.18,0.54,1.38,2.41,2.89,4.25,4.63,5.26,5.56,6.28,6.66], [7.041,0.08,6.65,0.12,0.56,1.44,2.45,3.81,4.33,5.1,5.6,5.96], [8.899,0.08,8.59,0.12,1.18,1.96,3.03,4.97,6.09,7.26,7.66,8.0], [8.45,0.16,8.02,0.2,0.64,1.34,2.2,2.58,4.79,5.67,6.31,6.89,7.29], [7.408,0.08,7.22,0.12,0.56,1.4,1.98,2.34,4.44,4.99,5.49,6.11,6.65], [5.764,0.18,5.53,0.22,0.8,1.37,1.79,1.97,3.21,3.72,4.58,5.06], [6.13,0.14,5.94,0.18,0.8,1.68,1.96,3.61,4.05,4.35,4.71,5.21], [6.45,0.18,6.26,0.22,0.62,0.94,1.56,2.28,3.75,4.03,4.99,5.53,5.77,5.99], [7.661,0.18,7.47,0.22,0.92,1.76,2.89,4.55,5.11,5.94,6.6,6.82], [7.41,0.12,7.22,0.16,0.82,1.68,2.2,2.64,4.21,5.27,5.63,6.31], [8.011,0.2,7.7,0.24,1.18,1.82,2.46,2.88,4.63,5.19,6.47,7.15], [7.89,0.18,7.72,0.22,0.92,1.44,2.58,4.57,4.93,5.35,6.21,6.85,7.11], [8.05,0.14,7.64,0.18,0.54,0.98,1.66,2.78,4.43,4.79,5.23,5.87,6.49,6.91], [8.72,0.18,7.61,0.22,0.78,1.86,2.33,2.85,4.65,5.17,5.69,6.6,6.98], [7.664,0.12,7.33,0.16,0.98,1.4,2.57,4.39,4.8,5.7,6.34], [5.816,0.18,5.57,0.22,0.72,1.1,1.32,1.54,3.15,3.53,4.69,4.99], [5.677,0.12,5.55,0.16,0.6,1.16,1.42,1.77,1.93,3.31,3.55,3.79,4.41,5.0], [7.25,0.16,6.82,0.2,0.82,1.82,2.62,4.19,4.73,5.25,5.85,6.23], [7.949,0.08,7.64,0.12,0.96,1.6,2.38,2.62,4.73,5.21,5.71,6.19,6.55], [5.97,0.12,5.76,0.16,0.74,1.36,1.98,2.26,3.65,4.11,4.53,5.21], [6.162,0.14,5.95,0.18,0.5,1.43,1.85,1.99,3.33,3.93,4.7,5.16,5.46], [7.33,0.12,6.78,0.16,0.84,1.46,2.04,2.38,4.09,4.45,5.13,5.81], [7.241,0.1,7.03,0.14,0.52,0.94,1.5,2.57,4.05,4.57,5.3,6.3,6.46], [6.29,0.14,6.06,0.18,0.54,0.9,1.42,1.96,2.3,3.61,4.33,4.75,5.23,5.59], [5.703,0.16,5.49,0.2,0.5,0.74,1.25,1.81,3.13,3.49,3.92,4.68], [6.732,0.08,6.38,0.12,1.28,1.96,2.32,3.79,4.41,4.99,5.53,5.87], [9.142,0.08,8.97,0.12,0.68,1.28,1.82,2.81,3.31,3.83,4.99,5.35,5.85,6.3,7.24,7.68,8.22,8.48]]
+};
+
+/* Sung tracks (ElevenLabs Music) for Listen: d = duration (s), p = times the mantra is sung, L = [line, start, end] */
+const MUSIC_CREDIT = 'Music and singing: AI-generated (ElevenLabs Music)';
+const SUNG_BED = 'audio/sung/chalisa-bed.mp3';
+const SUNG = {
+  gayatri: { d: 62.04, p: 2, L: [[0,9.02,11.12],[1,13.14,15.68],[2,17.36,26.72],[3,27.46,32.82],[0,32.88,35.5],[1,37.52,40.06],[2,42.2,49.94],[3,49.98,53.74]] },
+  ganesha: { d: 61.99, p: 2, L: [[0,8.0,11.44],[1,12.48,16.68],[2,19.72,23.12],[3,24.98,29.1],[0,33.7,37.1],[1,38.38,42.12],[2,44.12,48.06],[3,49.92,53.8]] },
+  saraswati: { d: 62.04, p: 2, L: [[0,9.04,12.88],[1,15.62,18.76],[2,21.42,25.84],[3,27.36,30.3],[0,32.92,36.52],[1,39.33,42.35],[2,45.12,49.52],[3,51.1,54.24]] },
+  mrityunjaya: { d: 66.04, p: 2, L: [[0,5.8,17.2],[1,17.6,21.56],[2,22.62,26.16],[3,27.76,33.6],[0,34.86,38.64],[1,40.22,43.46],[2,45.2,47.78],[3,50.32,60.96]] },
+  shiva: { d: 46.03, p: 4, L: [[0,3.2,12.36],[0,16.4,19.72],[0,20.02,27.7],[0,31.84,35.1]] },
+  lakshmi: { d: 46.03, p: 4, L: [[0,3.9,14.54],[0,14.64,22.06],[0,22.18,29.54],[0,29.68,37.1]] }
 };
 
 /* ------------------------------------------------------------------ */
@@ -1447,17 +1542,44 @@ function renderListen(m) {
     $('#lmean').innerHTML = meaningHTML(nL > 1 ? m.lines[li].meaning : m.overall);
   };
   const setBtn = on => { playing = on; btn.classList.toggle('playing', on); btn.classList.toggle('idle', !on); btn.innerHTML = on ? ICON.stop : ICON.play; btn.setAttribute('aria-label', on ? 'Stop' : 'Play'); };
+  const prog = tok => (li, c) => { if (!alive(tok)) return; showLine(li); $('#ldots').innerHTML = dotsHTML(nL, li); setChunk($('#lchunks'), c); };
+  /* Sung track: the song sings the mantra S.p times (twice); beads count each sung round and the song repeats until
+     the bead count is reached. The flower offering comes only after the song has ended. */
+  const playSungRounds = async tok => {
+    const S = SUNG[m.id], P = S.p, per = S.L.length / P, plays = Math.ceil(N / P);
+    let done = 0;
+    for (let r = 0; r < plays; r++) {
+      const show = prog(tok);
+      const res = await playSung(m, (li, c, k) => {
+        show(li, c);
+        /* a round is complete once its last line is sung (or the next round has begun) */
+        const d = Math.min(N, r * P + Math.floor((c >= m.lines[li].chunks.length ? k + 1 : k) / per));
+        if (d > done) { done = d; $('#lbeads').innerHTML = beadsSVG(N, done); }
+      }, tok);
+      if (res === 'error' && r === 0 && done === 0) return 'error';
+      if (res !== true || !alive(tok)) return false;
+      if (r < plays - 1 && !(await sleep(700, tok))) return false;
+    }
+    return true;
+  };
   btn.onclick = async () => {
     if (playing) { Player.stop(); keepAwake(false); setBtn(false); return; }
     const tok = Player.begin(); setBtn(true); keepAwake(true);
     shownLine = -1; showLine(0);
-    for (let r = 0; r < N; r++) {
-      $('#lbeads').innerHTML = beadsSVG(N, r);
-      const ok = await playFull(m, (li, c) => { if (!alive(tok)) return; showLine(li); $('#ldots').innerHTML = dotsHTML(nL, li); setChunk($('#lchunks'), c); }, tok);
-      if (!ok || !alive(tok)) return;
-      $('#lbeads').innerHTML = beadsSVG(N, r + 1);
-      sfx.soft();
-      if (r < N - 1 && !(await sleep(1100, tok))) return;
+    $('#lbeads').innerHTML = beadsSVG(N, 0);
+    const mode = await listenMode(m);
+    if (!alive(tok)) return;
+    let sungRes = mode === 'sung' ? await playSungRounds(tok) : 'error';
+    if (sungRes === false || !alive(tok)) return;
+    if (sungRes === 'error') {
+      for (let r = 0; r < N; r++) {
+        $('#lbeads').innerHTML = beadsSVG(N, r);
+        const ok = await playFull(m, prog(tok), tok);
+        if (!ok || !alive(tok)) return;
+        $('#lbeads').innerHTML = beadsSVG(N, r + 1);
+        sfx.soft();
+        if (r < N - 1 && !(await sleep(1100, tok))) return;
+      }
     }
     keepAwake(false); setBtn(false);
     $('#lmean').innerHTML = meaningHTML(m.overall);
@@ -1491,9 +1613,10 @@ function renderChalisaListen(m) {
   const play = async from => {
     const tok = Player.begin(); setBtn(true); keepAwake(true);
     show(from); chalisaFrom = from;
+    if (listenSung()) Bed.start(tok);   /* soft music bed under Monika's verses */
     const ok = await playFull(m, (li, c) => { if (!alive(tok)) return; if (li !== cur) { show(li); chalisaFrom = li; } setChunk($('#lchunks'), c); }, tok, from);
     if (!ok || !alive(tok)) return;
-    keepAwake(false); setBtn(false); chalisaFrom = 0;
+    Bed.stop(); keepAwake(false); setBtn(false); chalisaFrom = 0;
     celebrate({ id: m.id, big: true, title: 'Jai Hanuman!', again: () => play(0), ok: () => {} });
   };
   $('#vprev').onclick = () => { if (playing) stop(); if (cur > 0) { show(cur - 1); chalisaFrom = cur; } };
@@ -2014,7 +2137,10 @@ function renderParent() {
       '<div class="note" id="recmsg" hidden style="margin-top:8px" role="status"></div>' +
       '<div id="recrows"></div>' +
       '<p class="small" id="vstat">' + esc(voiceStatus()) + '</p></div>' +
-    '<div class="panel"><h2>Listen repeats</h2><p>How many times a mantra plays in Listen (bead counter). The Hanuman Chalisa plays once.</p>' +
+    '<div class="panel"><h2>Listen style</h2><p><b>Sung</b>: the six short mantras are sung with soft music, and the Hanuman Chalisa is chanted by Monika over soft music. <b>Chant</b>: Monika\u2019s calm chant, line by line, without music.</p>' +
+      '<div class="seg" role="group" aria-label="Listen style">' + LISTEN_STYLES.map(v => '<button class="pbtn' + (state.listenStyle === v ? ' sel' : '') + '" data-style="' + v + '" aria-pressed="' + (state.listenStyle === v) + '">' + (v === 'sung' ? 'Sung' : 'Chant') + '</button>').join('') + '</div>' +
+      '<p class="small">Learn and \u201cYour turn\u201d always use the chant, one line at a time. Your own full recording is always played first in Listen.</p></div>' +
+    '<div class="panel"><h2>Listen repeats</h2><p>How many times a mantra plays in Listen (bead counter). A sung track sings the mantra twice, so it plays until the count is reached. The Hanuman Chalisa plays once.</p>' +
       '<div class="seg" role="group" aria-label="Repeat count">' + REPEAT_OPTIONS.map(n => '<button class="pbtn' + (state.repeat === n ? ' sel' : '') + '" data-rep="' + n + '" aria-pressed="' + (state.repeat === n) + '">' + n + '</button>').join('') + '</div></div>' +
     '<div class="panel"><h2>Lines &amp; progress</h2><div class="switch-row"><p>Unlock all lines and verses<br><span class="small">Normally each line (and each Chalisa verse) opens after the one before is practised.</span></p><button class="switch" id="unlock" role="switch" aria-checked="' + state.unlockAll + '" aria-label="Unlock all lines"></button></div>' +
       '<ul class="plist">' + MANTRAS.map(x => '<li><span>' + esc(shortName(x)) + '</span><span>' + starsOf(x.id) + ' ★ &middot; ' + flowersOf(x.id) + ' flowers &middot; ' + practisedCount(x.id) + '/' + x.lines.length + '</span></li>').join('') + '</ul>' +
@@ -2026,7 +2152,8 @@ function renderParent() {
     '<div class="panel"><h2>App</h2><p>Works fully offline once opened. To install: Chrome menu ⋮ → <b>Install app</b> or <b>Add to Home screen</b>.</p>' +
       '<div class="rec-btns"><button class="pbtn" id="install"' + (deferredInstall ? '' : ' hidden') + '>Install app</button></div>' +
       '<p class="small">No ads, no accounts, no internet needed. Progress and recordings stay on this device only.</p>' +
-      '<p class="small credit" id="vcredit">' + esc(VOICE_CREDIT) + '</p></div>' +
+      '<p class="small credit" id="vcredit">' + esc(VOICE_CREDIT) + '</p>' +
+      '<p class="small credit" id="mcredit">' + esc(MUSIC_CREDIT) + '</p></div>' +
     '</div></section>';
 
   const msg = (t, warn) => { const x = $('#recmsg'); if (!x) return; x.hidden = false; x.classList.toggle('warn', !!warn); x.innerHTML = t; };
@@ -2038,7 +2165,7 @@ function renderParent() {
     box.innerHTML = keys.map((k, i) => {
       const live = !!(rec && rec.key === k), h = have[k] != null, lab = rowLabel(k, i), sid = 'st-' + k;
       return '<div class="rec-row"><div class="rec-head"><div><b>' + esc(lab[0]) + '</b> <span class="sub">' + esc(lab[1]) + '</span></div>' +
-        '<span class="status' + (live ? ' live' : h ? ' mine' : '') + '" id="' + esc(sid) + '">' + (live ? '\u25CF 0:00' : h ? 'Your voice \u2713 ' + fmtTime(have[k]) : k.endsWith('/full') ? (hasVoice(m.id, 0) ? 'Monika, line by line' : 'Built-in voice') : hasVoice(m.id, i) ? 'Monika (AI voice)' : 'Built-in voice') + '</span></div>' +
+        '<span class="status' + (live ? ' live' : h ? ' mine' : '') + '" id="' + esc(sid) + '">' + (live ? '\u25CF 0:00' : h ? 'Your voice \u2713 ' + fmtTime(have[k]) : k.endsWith('/full') ? (listenSung() && hasSung(m.id) ? 'Sung track (AI music)' : hasVoice(m.id, 0) ? 'Monika, line by line' : 'Built-in voice') : hasVoice(m.id, i) ? 'Monika (AI voice)' : 'Built-in voice') + '</span></div>' +
         '<div class="rec-btns">' +
           '<button class="pbtn rec' + (live ? ' on' : '') + '" data-rec="' + k + '"' + (canRecord ? '' : ' disabled') + ' aria-label="' + (live ? 'Stop recording ' : 'Record ') + esc(lab[0]) + '">' + (live ? ICON.stopS + ' Stop' : ICON.recDot + ' Record') + '</button>' +
           '<button class="pbtn" data-play="' + k + '"' + (live ? ' disabled' : '') + ' aria-label="Play ' + esc(lab[0]) + '">' + ICON.playS + ' Play</button>' +
@@ -2066,7 +2193,7 @@ function renderParent() {
       const tok = Player.begin();
       $$('[data-play]').forEach(x => { x.dataset.on = ''; x.innerHTML = PLAY_HTML; });
       b.dataset.on = '1'; b.innerHTML = ICON.stopS + ' Stop';
-      if (k.endsWith('/full')) await playFull(m, () => {}, tok); else await playLine(m, +k.split('/')[1].slice(4), () => {}, tok);
+      if (k.endsWith('/full')) { const mode = await listenMode(m); if (mode !== 'sung' || (await playSung(m, () => {}, tok)) === 'error') await playFull(m, () => {}, tok); } else await playLine(m, +k.split('/')[1].slice(4), () => {}, tok);
       if (b.isConnected && (alive(tok) || b.dataset.on === '1')) { b.dataset.on = ''; b.innerHTML = PLAY_HTML; }
     } else if (b.dataset.del) {
       const k = b.dataset.del;
@@ -2074,6 +2201,10 @@ function renderParent() {
       Player.stop();
       try { await DB.del(k); } catch (x) {}
       invalidateRec(k); msg('Recording deleted. ' + (hasVoice(m.id, +(k.split('/')[1].slice(4)) || 0) ? 'Monika\u2019s recorded voice' : 'The built-in voice') + ' will be used.', false); drawRows();
+    } else if (b.dataset.style) {
+      Player.stop(); state.listenStyle = b.dataset.style; save();
+      $$('[data-style]').forEach(x => { const on = x.dataset.style === state.listenStyle; x.classList.toggle('sel', on); x.setAttribute('aria-pressed', on); });
+      drawRows();
     } else if (b.dataset.rep) {
       state.repeat = +b.dataset.rep; save();
       $$('[data-rep]').forEach(x => { const on = +x.dataset.rep === state.repeat; x.classList.toggle('sel', on); x.setAttribute('aria-pressed', on); });
@@ -2081,7 +2212,7 @@ function renderParent() {
       state.unlockAll = !state.unlockAll; save(); b.setAttribute('aria-checked', state.unlockAll);
     } else if (b.id === 'reset') {
       if (b.dataset.confirm !== '1') { b.dataset.confirm = '1'; b.innerHTML = ICON.trash + ' Tap again to reset'; setTimeout(() => { if (b.isConnected) { b.dataset.confirm = ''; b.innerHTML = ICON.trash + ' Reset progress'; } }, 3500); return; }
-      state = Object.assign(freshState(), { repeat: state.repeat });
+      state = Object.assign(freshState(), { repeat: state.repeat, listenStyle: state.listenStyle });
       save(); renderParent(); toast(ICON.check.replace(/currentColor/g, '#3DBE55') + '<span>Progress reset</span>');
     } else if (b.id === 'install' && deferredInstall) {
       deferredInstall.prompt(); try { await deferredInstall.userChoice; } catch (x) {} deferredInstall = null; b.hidden = true;
@@ -2098,5 +2229,5 @@ route();
 if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
   window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js', { scope: './' }).catch(() => {}); });
 }
-window.__gk = { MANTRAS, MBY, state: () => state, getRec, segmentsFor, canRecord, DB, recKeysFor, fxLog, sounds: TS.log, REACT, VOICE_T, voiceUrl, getVoice, player: Player };
+window.__gk = { MANTRAS, MBY, state: () => state, getRec, segmentsFor, canRecord, DB, recKeysFor, fxLog, sounds: TS.log, REACT, VOICE_T, voiceUrl, getVoice, player: Player, SUNG, sungUrl, sungSegs, SUNG_BED, bed: () => Bed.info() };
 })();
